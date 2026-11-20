@@ -1,0 +1,200 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# What a fork's pull request gets: the Action must work with this alone.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  unit:
+    name: Unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm test
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Biome
+        run: npx --yes @biomejs/biome@2.6.7 ci .
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+
+  # Runs the Action itself against projects with a fake CLI, which records its arguments, writes a step summary and a
+  # report folder, and exits with FAKE_CLI_EXIT.
+  e2e:
+    name: End to end (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux, os: ubuntu-latest }
+          - { name: windows, os: windows-latest }
+    steps:
+      # The default checkout, one commit deep: `affected` has to fetch the base's history itself.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Write the projects
+        run: |
+          node test/fake-project.mjs e2e/pass
+          node test/fake-project.mjs e2e/fail
+          node test/fake-project.mjs e2e/consistency
+          node test/fake-project.mjs e2e/missing none
+          node test/fake-project.mjs e2e/out-of-range 2.0.0
+
+      - name: A passing run
+        id: pass
+        uses: ./
+        with:
+          working-directory: e2e/pass
+        env:
+          FAKE_CLI_EXIT: "0"
+      - name: Check it uploaded nothing and exited 0
+        env:
+          EXIT_CODE: ${{ steps.pass.outputs.exit-code }}
+          ARTIFACT_URL: ${{ steps.pass.outputs.artifact-url }}
+          REPORT_DIR: ${{ steps.pass.outputs.report-dir }}
+        run: |
+          test "$EXIT_CODE" = 0
+          test -z "$ARTIFACT_URL"
+          test -z "$REPORT_DIR"
+
+      - name: A failing shard
+        id: fail
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: e2e/fail
+          storybook: e2e-${{ matrix.name }}
+          shard: 2/4
+          retention-days: 1
+        env:
+          FAKE_CLI_EXIT: "1"
+      - name: Check it failed with the CLI's code and linked the artifact
+        env:
+          OUTCOME: ${{ steps.fail.outcome }}
+          EXIT_CODE: ${{ steps.fail.outputs.exit-code }}
+          ARTIFACT_URL: ${{ steps.fail.outputs.artifact-url }}
+          REPORT_DIR: ${{ steps.fail.outputs.report-dir }}
+        run: |
+          test "$OUTCOME" = failure
+          test "$EXIT_CODE" = 1
+          [[ "$ARTIFACT_URL" == "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts/"* ]]
+          test -f "$REPORT_DIR/report.json"
+          node -e '
+            const args = JSON.parse(require("fs").readFileSync("e2e/fail/cli-args.json", "utf8"))
+            require("assert").deepStrictEqual(args, ["test", "--storybook", "e2e-${{ matrix.name }}", "--shard", "2/4"])
+          '
+      - name: Download the shard's artifact by its name
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: visual-check-report-e2e-${{ matrix.name }}-2-of-4
+          path: downloaded/fail
+      - run: test -f downloaded/fail/report.json
+
+      - name: A failing consistency check
+        id: consistency
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: e2e/consistency
+          storybook: e2e-${{ matrix.name }}
+          consistency: true
+          retention-days: 1
+        env:
+          FAKE_CLI_EXIT: "2"
+      - name: Check it exited 2
+        env:
+          OUTCOME: ${{ steps.consistency.outcome }}
+          EXIT_CODE: ${{ steps.consistency.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = failure
+          test "$EXIT_CODE" = 2
+      - name: Download the consistency check's artifact by its name
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: visual-check-consistency-e2e-${{ matrix.name }}
+          path: downloaded/consistency
+      - run: test -f downloaded/consistency/report.json
+
+      - name: A project without the CLI
+        id: missing
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: e2e/missing
+      - name: A project with a CLI out of range
+        id: out-of-range
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: e2e/out-of-range
+      - name: Check both failed before running a CLI
+        env:
+          MISSING: ${{ steps.missing.outcome }}
+          MISSING_EXIT_CODE: ${{ steps.missing.outputs.exit-code }}
+          OUT_OF_RANGE: ${{ steps.out-of-range.outcome }}
+          OUT_OF_RANGE_EXIT_CODE: ${{ steps.out-of-range.outputs.exit-code }}
+        run: |
+          test "$MISSING" = failure
+          test -z "$MISSING_EXIT_CODE"
+          test "$OUT_OF_RANGE" = failure
+          test -z "$OUT_OF_RANGE_EXIT_CODE"
+          test ! -e e2e/out-of-range/cli-args.json
+
+      - name: Affected
+        uses: ./
+        with:
+          working-directory: e2e/pass
+          affected: true
+        env:
+          FAKE_CLI_EXIT: "0"
+      - name: Check affected applied on a pull request only, with the merge base fetched
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            expected='["test","--affected"]'
+            git merge-base HEAD "origin/$BASE_REF"
+          else
+            expected='["test"]'
+          fi
+          test "$(cat e2e/pass/cli-args.json)" = "$expected"
