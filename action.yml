@@ -1,0 +1,84 @@
+name: visual-check
+description: Run the project's visual-check CLI, and upload the report when snapshots differ from their baselines.
+author: visual-check
+branding:
+  icon: eye
+  color: purple
+
+inputs:
+  storybook:
+    description: Runs one named Storybook (--storybook).
+    required: false
+    default: ""
+  shard:
+    description: This job's share as k/n, such as 2/4 (--shard). It also names the report's artifact.
+    required: false
+    default: ""
+  affected:
+    description: >-
+      Covers only the stories the changes can alter (--affected), on pull requests only. On other events it's ignored
+      with a note. When on, the base's history is fetched until the merge base resolves.
+    required: false
+    default: "false"
+  consistency:
+    description: Runs only the consistency check (--consistency).
+    required: false
+    default: "false"
+  working-directory:
+    description: Where the CLI runs, and where the config search starts.
+    required: false
+    default: "."
+  args:
+    description: Extra CLI arguments, such as --workers 2. Quoted as in a shell; nothing is expanded.
+    required: false
+    default: ""
+  retention-days:
+    description: Days to keep the report's artifact. Defaults to the repository's setting.
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: The CLI's exit code. 0 passed, 1 found differences, 2 stopped on an error.
+    value: ${{ steps.run.outputs.exit-code }}
+  report-dir:
+    description: The report folder's absolute path, when the run left one.
+    value: ${{ steps.run.outputs.report-dir }}
+  artifact-url:
+    description: The report artifact's link, when it was uploaded.
+    value: ${{ steps.upload.outputs.artifact-url }}
+
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/src/run.mjs"
+      env:
+        INPUT_STORYBOOK: ${{ inputs.storybook }}
+        INPUT_SHARD: ${{ inputs.shard }}
+        INPUT_AFFECTED: ${{ inputs.affected }}
+        INPUT_CONSISTENCY: ${{ inputs.consistency }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_ARGS: ${{ inputs.args }}
+
+    - id: upload
+      if: steps.run.outputs.upload == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ steps.run.outputs.artifact-name }}
+        path: ${{ steps.run.outputs.report-dir }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: ignore
+        # The report folder sits in `.visual-check`, which the hidden-file filter would otherwise drop.
+        include-hidden-files: true
+        # A re-run of the job uploads under the same name.
+        overwrite: true
+
+    - if: ${{ !cancelled() && steps.run.outputs.exit-code != '' }}
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/src/finish.mjs"
+      env:
+        VISUAL_CHECK_EXIT_CODE: ${{ steps.run.outputs.exit-code }}
+        VISUAL_CHECK_ARTIFACT_NAME: ${{ steps.run.outputs.artifact-name }}
+        VISUAL_CHECK_ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
