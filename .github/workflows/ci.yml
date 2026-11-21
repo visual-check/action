@@ -198,3 +198,17 @@ jobs:
             expected='["test"]'
           fi
           test "$(cat e2e/pass/cli-args.json)" = "$expected"
+
+  # Calls the reusable workflow from this commit, as a project would. Its `$/` resolves to the same commit, so every job
+  # runs the Action under test. test/ stands in for the project's folder: each job's setup writes a fake project there,
+  # and the fake CLI exits 2 unless the Action passed the arguments that job should.
+  reusable-workflow:
+    name: Reusable workflow
+    uses: ./.github/workflows/test.yml
+    with:
+      shards: 4
+      storybook: self-test
+      working-directory: test
+      setup: |
+        node fake-project.mjs .
+        echo 'FAKE_CLI_EXPECT=^test --storybook self-test (--consistency|--shard [1-4]/4)$' >> "$GITHUB_ENV"
