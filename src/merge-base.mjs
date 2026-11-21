@@ -58,7 +58,10 @@ export function fetchUntilMergeBase({ cwd, baseRef, log = () => undefined }) {
 
   const resolves = () => git(cwd, ['merge-base', 'HEAD', remoteRef]).ok
   const isShallow = () => git(cwd, ['rev-parse', '--is-shallow-repository']).stdout === 'true'
-  const hasBase = () => git(cwd, ['rev-parse', '--verify', '--quiet', remoteRef]).ok
+  const baseCommit = () => git(cwd, ['rev-parse', '--verify', '--quiet', `${remoteRef}^{commit}`]).stdout
+  // The base and `HEAD` by commit as well as the base by name: newer git (2.54, not 2.49) skips a ref whose tip the
+  // clone already has, so `--deepen` deepens only the commits a fetch names.
+  const bothWants = () => [refspec, ...new Set([baseCommit(), head.stdout].filter(Boolean))]
   const fetch = (/** @type {string[]} */ extra, /** @type {string[]} */ wants) => {
     fetches += 1
     log(`visual-check: fetching origin/${baseRef} (${extra.join(' ') || 'full history'})`)
@@ -75,14 +78,14 @@ export function fetchUntilMergeBase({ cwd, baseRef, log = () => undefined }) {
   // a depth first, then deepens both.
   const steps = isShallow()
     ? [
-        ...(hasBase() ? [] : [{ extra: [`--depth=${firstDepth}`], wants: [refspec] }]),
-        ...deepenSteps.map((step) => ({ extra: [`--deepen=${step}`], wants: [refspec, head.stdout] })),
-        { extra: ['--unshallow'], wants: [refspec, head.stdout] },
+        ...(baseCommit() ? [] : [{ extra: [`--depth=${firstDepth}`], wants: () => [refspec] }]),
+        ...deepenSteps.map((step) => ({ extra: [`--deepen=${step}`], wants: bothWants })),
+        { extra: ['--unshallow'], wants: bothWants },
       ]
-    : [{ extra: [], wants: [refspec] }]
+    : [{ extra: [], wants: () => [refspec] }]
 
   for (const { extra, wants } of steps) {
-    const result = fetch(extra, wants)
+    const result = fetch(extra, wants())
 
     if (!result.ok) {
       return { resolved: false, fetches, problem: `git fetch failed: ${result.stderr}` }
