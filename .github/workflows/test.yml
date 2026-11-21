@@ -1,6 +1,7 @@
 # The sharded check as a reusable workflow: `uses: visual-check/action/.github/workflows/test.yml@v1`. A plan job turns
 # `shards` into the matrix, the consistency check runs in a job of its own, and one job per shard waits for it. Jobs run
-# on separate machines, so each one runs `setup` to build and serve its own Storybook.
+# on separate machines, so each one runs `setup` to build and serve its own Storybook. `repository` and `artifact` let a
+# workflow test another repository with files an earlier job made, as visual-check's test apps do.
 name: visual-check
 
 on:
@@ -30,6 +31,19 @@ on:
         default: .
       storybook:
         description: Runs one named Storybook (--storybook). Every Storybook by default.
+        type: string
+        default: ""
+      repository:
+        description: >-
+          The repository every job checks out, as owner/name: the run's own repository by default. Another repository
+          is checked out at its default branch. A workflow called from another repository's workflow gets that
+          repository's github context, so name the one to test here.
+        type: string
+        default: ""
+      artifact:
+        description: >-
+          The name of an artifact of this run, such as files an earlier job built, that every job downloads into
+          $RUNNER_TEMP/<name> before setup.
         type: string
         default: ""
     secrets:
@@ -73,10 +87,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          repository: ${{ inputs.repository }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: ${{ inputs.node-version-file }}
+      - name: Download the artifact
+        if: inputs.artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artifact }}
+          path: ${{ runner.temp }}/${{ inputs.artifact }}
       - name: Set up the project
         working-directory: ${{ inputs.working-directory }}
         env:
@@ -103,10 +124,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          repository: ${{ inputs.repository }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: ${{ inputs.node-version-file }}
+      - name: Download the artifact
+        if: inputs.artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artifact }}
+          path: ${{ runner.temp }}/${{ inputs.artifact }}
       - name: Set up the project
         working-directory: ${{ inputs.working-directory }}
         env:
