@@ -68,6 +68,7 @@ Run the consistency check in a job of its own, and the shards with `fail-fast: f
 jobs:
   visual:
     uses: visual-check/action/.github/workflows/test.yml@v1
+    secrets: inherit
     with:
       shards: 4
       setup: |
@@ -87,6 +88,8 @@ A plan job turns `shards` into the matrix. The consistency check runs in a job o
 | `runs-on`           | `ubuntu-24.04`  | The runner every job runs on                                                                                          |
 | `working-directory` | `.`             | Where `setup` and the CLI run, and where the config search starts                                                     |
 | `storybook`         | Every Storybook | Runs one named Storybook (`--storybook`)                                                                              |
+
+`setup` gets one secret, `NODE_AUTH_TOKEN`, for a private registry's `.npmrc`. `secrets: inherit` passes the caller's secret of that name. To pass one by another name, use `secrets: { NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} }` instead.
 
 The workflow calls the Action as `$/`, its own repository at the commit the workflow came from, so `@v1` pins both. GitHub Enterprise Server has no `$/`, and self-hosted runners need version 2.336.0 or later. The jobs ask for `contents: read` only, so the calling job has to grant at least that.
 

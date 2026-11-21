@@ -32,6 +32,12 @@ on:
         description: Runs one named Storybook (--storybook). Every Storybook by default.
         type: string
         default: ""
+    secrets:
+      NODE_AUTH_TOKEN:
+        description: >-
+          A registry token for setup, in its NODE_AUTH_TOKEN variable, which an .npmrc can read. secrets: inherit passes
+          the caller's secret of that name.
+        required: false
 
 # All the jobs need. A called workflow can only narrow the token the caller grants, so the caller has to grant this.
 permissions:
@@ -75,6 +81,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         env:
           VISUAL_CHECK_SETUP: ${{ inputs.setup }}
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
         run: eval "$VISUAL_CHECK_SETUP"
       # `$/` is this repository at the commit this workflow came from, so the ref a caller pins covers the Action too.
       - name: visual-check
@@ -104,6 +111,7 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         env:
           VISUAL_CHECK_SETUP: ${{ inputs.setup }}
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN }}
         run: eval "$VISUAL_CHECK_SETUP"
       - name: visual-check
         uses: $/
