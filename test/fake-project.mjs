@@ -4,16 +4,25 @@ import { pathToFileURL } from 'node:url'
 
 /**
  * The fake CLI's bin. It records its arguments in `cli-args.json`, appends a line to the step summary as the real CLI
- * does, leaves a report folder beside the config unless it passes, and exits with `FAKE_CLI_EXIT`, 0 by default.
+ * does, leaves a report folder beside the config unless it passes, and exits with `FAKE_CLI_EXIT`, 0 by default. When
+ * `FAKE_CLI_EXPECT` is set, a regular expression for the arguments joined by spaces, arguments that don't match exit 2
+ * instead.
  */
 const fakeBin = `#!/usr/bin/env node
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const exitCode = Number(process.env.FAKE_CLI_EXIT ?? '0')
+const args = process.argv.slice(2)
+const expected = process.env.FAKE_CLI_EXPECT
+const unexpected = Boolean(expected) && !new RegExp(expected).test(args.join(' '))
+const exitCode = unexpected ? 2 : Number(process.env.FAKE_CLI_EXIT ?? '0')
 const project = process.env.FAKE_CLI_PROJECT ?? process.cwd()
 
-writeFileSync(join(project, 'cli-args.json'), JSON.stringify(process.argv.slice(2)))
+writeFileSync(join(project, 'cli-args.json'), JSON.stringify(args))
+
+if (unexpected) {
+  console.error('fake visual-check expected arguments matching ' + expected + ', not: ' + args.join(' '))
+}
 
 if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## visual-check (fake CLI)\\n\\nexit ' + exitCode)
