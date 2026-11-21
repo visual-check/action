@@ -1,0 +1,6 @@
+# actionlint 1.7.12 doesn't know the self-repository reference `uses: $/` yet
+# (https://github.com/rhysd/actionlint/issues/711). Drop this once it does.
+paths:
+  .github/workflows/test.yml:
+    ignore:
+      - 'specifying action "\$/" in invalid format because ref is missing'
