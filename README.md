@@ -60,7 +60,37 @@ It needs no permissions beyond `contents: read`, so it works on pull requests fr
 
 ## Sharding
 
-Run the consistency check in a job of its own, and the shards with `fail-fast: false`:
+Run the consistency check in a job of its own, and the shards with `fail-fast: false`. The reusable workflow builds that layout from a shard count, or you can write the jobs yourself.
+
+### The reusable workflow
+
+```yaml
+jobs:
+  visual:
+    uses: visual-check/action/.github/workflows/test.yml@v1
+    with:
+      shards: 4
+      setup: |
+        npm ci
+        npx storybook build
+        npx http-server storybook-static -p 6006 -a 127.0.0.1 --silent &
+        npx wait-on tcp:127.0.0.1:6006
+```
+
+A plan job turns `shards` into the matrix. The consistency check runs in a job of its own, and the shard jobs wait for it, so none runs when it fails. One failing shard doesn't cancel the others. Each of those jobs checks out the repository, sets up Node, runs `setup` and then the Action, so each one builds and serves its own Storybook.
+
+| Input               | Default         | Does                                                                                                                  |
+| ------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `shards`            | Required        | The number of shard jobs, from 1 to 256                                                                               |
+| `setup`             | Required        | A bash script that installs, builds and serves Storybook and leaves it running. It stops at its first failing command |
+| `node-version-file` | `.nvmrc`        | The file `actions/setup-node` reads the Node version from, relative to the repository root                            |
+| `runs-on`           | `ubuntu-24.04`  | The runner every job runs on                                                                                          |
+| `working-directory` | `.`             | Where `setup` and the CLI run, and where the config search starts                                                     |
+| `storybook`         | Every Storybook | Runs one named Storybook (`--storybook`)                                                                              |
+
+The workflow calls the Action as `$/`, its own repository at the commit the workflow came from, so `@v1` pins both. GitHub Enterprise Server has no `$/`, and self-hosted runners need version 2.336.0 or later. The jobs ask for `contents: read` only, so the calling job has to grant at least that.
+
+### By hand
 
 ```yaml
 jobs:
@@ -92,7 +122,7 @@ Releases are immutable `vX.Y.Z` tags, plus a moving `v1` tag. The major goes up 
 
 ## Developing
 
-The Action is a composite `action.yml` with plain Node scripts in `src/`, and no build. `npm test` runs the tests with Node's test runner; CI also runs the Action itself against projects with a fake CLI.
+The Action is a composite `action.yml` with plain Node scripts in `src/`, and no build. `npm test` runs the tests with Node's test runner. CI also runs the Action itself against projects with a fake CLI, and calls the reusable workflow from the same commit, with four shards.
 
 ## License
 
