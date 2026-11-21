@@ -221,16 +221,35 @@ jobs:
           fi
           test "$(cat e2e/pass/cli-args.json)" = "$expected"
 
+  # Files the reusable workflow's jobs download before setup.
+  reusable-workflow-files:
+    name: Reusable workflow's files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: mkdir -p "$RUNNER_TEMP/files" && echo 'from an earlier job' > "$RUNNER_TEMP/files/marker.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reusable-workflow-files
+          path: ${{ runner.temp }}/files/
+          if-no-files-found: error
+          retention-days: 1
+
   # Calls the reusable workflow from this commit, as a project would. Its `$/` resolves to the same commit, so every job
-  # runs the Action under test. test/ stands in for the project's folder: each job's setup writes a fake project there,
-  # and the fake CLI exits 2 unless the Action passed the arguments that job should.
+  # runs the Action under test. It names this repository and an artifact as another repository's caller would, and each
+  # job's setup checks the artifact's file arrived. test/ stands in for the project's folder: each job's setup writes a
+  # fake project there, and the fake CLI exits 2 unless the Action passed the arguments that job should.
   reusable-workflow:
     name: Reusable workflow
+    needs: reusable-workflow-files
     uses: ./.github/workflows/test.yml
     with:
       shards: 4
       storybook: self-test
       working-directory: test
+      repository: ${{ github.repository }}
+      artifact: reusable-workflow-files
       setup: |
+        test "$(cat "$RUNNER_TEMP/reusable-workflow-files/marker.txt")" = 'from an earlier job'
         node fake-project.mjs .
         echo 'FAKE_CLI_EXPECT=^test --storybook self-test (--consistency|--shard [1-4]/4)$' >> "$GITHUB_ENV"
