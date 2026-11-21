@@ -122,7 +122,19 @@ jobs:
             const args = JSON.parse(require("fs").readFileSync("e2e/fail/cli-args.json", "utf8"))
             require("assert").deepStrictEqual(args, ["test", "--storybook", "e2e-${{ matrix.name }}", "--shard", "2/4"])
           '
+      # Just after an upload, finding an artifact by name can briefly miss it, or on a re-run find the previous
+      # attempt's, which the upload's overwrite deleted. A second try a few seconds later finds it.
       - name: Download the shard's artifact by its name
+        id: download-fail
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: visual-check-report-e2e-${{ matrix.name }}-2-of-4
+          path: downloaded/fail
+      - if: steps.download-fail.outcome == 'failure'
+        run: sleep 10
+      - name: Download it again after a moment
+        if: steps.download-fail.outcome == 'failure'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: visual-check-report-e2e-${{ matrix.name }}-2-of-4
@@ -148,6 +160,16 @@ jobs:
           test "$OUTCOME" = failure
           test "$EXIT_CODE" = 2
       - name: Download the consistency check's artifact by its name
+        id: download-consistency
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: visual-check-consistency-e2e-${{ matrix.name }}
+          path: downloaded/consistency
+      - if: steps.download-consistency.outcome == 'failure'
+        run: sleep 10
+      - name: Download it again after a moment
+        if: steps.download-consistency.outcome == 'failure'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: visual-check-consistency-e2e-${{ matrix.name }}
