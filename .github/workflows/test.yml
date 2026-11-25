@@ -1,7 +1,7 @@
 # The sharded check as a reusable workflow: `uses: visual-check/action/.github/workflows/test.yml@v1`. A plan job turns
 # `shards` into the matrix, the consistency check runs in a job of its own, and one job per shard waits for it. Jobs run
-# on separate machines, so each one runs `setup` to build and serve its own Storybook. `repository` and `artifact` let a
-# workflow test another repository with files an earlier job made, as visual-check's test apps do.
+# on separate machines, so each one runs `setup` to build and serve its own Storybook. `repository`, `ref` and
+# `artifact` let a workflow test another repository with files an earlier job made, as visual-check's test apps do.
 name: visual-check
 
 on:
@@ -38,6 +38,12 @@ on:
           The repository every job checks out, as owner/name: the run's own repository by default. Another repository
           is checked out at its default branch. A workflow called from another repository's workflow gets that
           repository's github context, so name the one to test here.
+        type: string
+        default: ""
+      ref:
+        description: >-
+          The branch, tag or commit of repository every job checks out. Empty checks out the run's commit for the run's
+          own repository, and the default branch of another.
         type: string
         default: ""
       artifact:
@@ -88,6 +94,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -125,6 +132,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
