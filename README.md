@@ -80,16 +80,17 @@ jobs:
 
 A plan job turns `shards` into the matrix. The consistency check runs in a job of its own, and the shard jobs wait for it, so none runs when it fails. One failing shard doesn't cancel the others. Each of those jobs checks out the repository (or `repository`), sets up Node, downloads `artifact` if you name one, runs `setup` and then the Action, so each one builds and serves its own Storybook.
 
-| Input               | Default              | Does                                                                                                                           |
-| ------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `shards`            | Required             | The number of shard jobs, from 1 to 256                                                                                        |
-| `setup`             | Required             | A bash script that installs, builds and serves Storybook and leaves it running. It stops at its first failing command          |
-| `node-version-file` | `.nvmrc`             | The file `actions/setup-node` reads the Node version from, relative to the repository root                                     |
-| `runs-on`           | `ubuntu-24.04`       | The runner every job runs on                                                                                                   |
-| `working-directory` | `.`                  | Where `setup` and the CLI run, and where the config search starts                                                              |
-| `storybook`         | Every Storybook      | Runs one named Storybook (`--storybook`)                                                                                       |
-| `repository`        | The run's repository | The repository every job checks out, as `owner/name`. Another repository is checked out at its default branch                  |
-| `artifact`          |                      | An artifact of this run that every job downloads into `$RUNNER_TEMP/<name>` before `setup`, such as files an earlier job built |
+| Input               | Default              | Does                                                                                                                                      |
+| ------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `shards`            | Required             | The number of shard jobs, from 1 to 256                                                                                                   |
+| `setup`             | Required             | A bash script that installs, builds and serves Storybook and leaves it running. It stops at its first failing command                     |
+| `node-version-file` | `.nvmrc`             | The file `actions/setup-node` reads the Node version from, relative to the repository root                                                |
+| `runs-on`           | `ubuntu-24.04`       | The runner every job runs on                                                                                                              |
+| `working-directory` | `.`                  | Where `setup` and the CLI run, and where the config search starts                                                                         |
+| `storybook`         | Every Storybook      | Runs one named Storybook (`--storybook`)                                                                                                  |
+| `repository`        | The run's repository | The repository every job checks out, as `owner/name`. Another repository is checked out at its default branch                             |
+| `ref`               |                      | The branch, tag or commit of `repository` every job checks out. Empty checks out the run's commit, or another repository's default branch |
+| `artifact`          |                      | An artifact of this run that every job downloads into `$RUNNER_TEMP/<name>` before `setup`, such as files an earlier job built            |
 
 A workflow called from another repository's workflow, as when that repository's workflow calls one that calls this, gets the top caller's `github` context, so a plain checkout would check out the top caller's repository: name the one to test in `repository`. `setup` is a run step and can't download artifacts, so name the files an earlier job of the run built in `artifact`.
 
