@@ -19,6 +19,8 @@ jobs:
 
 The Action doesn't build or serve Storybook: serve each static build on the port in its config's `url`, then run the Action. The docs use Linux runners.
 
+Use a server that takes many connections at once, as `http-server` does. `python3 -m http.server` doesn't: its listen backlog is 5, so under parallel workers it drops connections and stories break at random with `Failed to fetch dynamically imported module`. Avoid `serve` with its default `cleanUrls`, which redirects `iframe.html` and drops the story's query.
+
 ## Which CLI it runs
 
 The project's own `@visual-check/cli`, resolved from `working-directory`, so your lockfile picks the version. The Action never installs one, and never runs `update`.
